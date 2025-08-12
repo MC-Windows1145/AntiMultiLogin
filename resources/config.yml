@@ -1,0 +1,6 @@
+---
+max_ip_connections: 3
+max_cid_connections: 2
+kick_message: §c每个IP最多允许{ip_limit}个连接，每个设备最多允许{cid_limit}个连接
+whitelist: []
+...
