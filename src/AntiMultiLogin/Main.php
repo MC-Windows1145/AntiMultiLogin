@@ -82,7 +82,6 @@ class Main extends PluginBase implements Listener
         $player = $event->getPlayer();
         $ip = $player->getAddress();
         $cid = $player->getClientId();
-        // 减少计数（因为连接被拒绝）
         $this->ipCount[$ip]--;
         $this->cidCount[$cid]--;
     }
