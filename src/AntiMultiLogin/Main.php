@@ -4,6 +4,7 @@ namespace AntiMultiLogin;
 use pocketmine\plugin\PluginBase;
 use pocketmine\event\Listener;
 use pocketmine\event\player\PlayerPreLoginEvent;
+use pocketmine\event\player\PlayerQuitEvent;
 use pocketmine\utils\Config;
 use pocketmine\Player;
 
@@ -24,7 +25,7 @@ class Main extends PluginBase implements Listener
         $config = new Config($this->getDataFolder() . "config.yml", Config::YAML, [
             "max_ip_connections" => 3,
             "max_cid_connections" => 2,
-            "kick_message" => "§c每个IP最多允许{ip_limit}个连接，每个设备最多允许{cid_limit}个连接" //TODO: 白名单
+            "kick_message" => "§c我操你妈开小号的死妈伪人" //§c每个IP最多允许{ip_limit}个连接，每个设备最多允许{cid_limit}个连接
         ]);
 
         $this->maxIpConnections = $config->get("max_ip_connections");
@@ -68,9 +69,6 @@ class Main extends PluginBase implements Listener
             $event->setKickMessage($message);
             $event->setCancelled(true);
 
-            // 减少计数（因为连接被拒绝）
-            $this->ipCount[$ip]--;
-            $this->cidCount[$cid]--;
 
             if ($this->ipCount[$ip] <= 0)
                 unset($this->ipCount[$ip]);
@@ -84,6 +82,7 @@ class Main extends PluginBase implements Listener
         $player = $event->getPlayer();
         $ip = $player->getAddress();
         $cid = $player->getClientId();
+        // 减少计数（因为连接被拒绝）
         $this->ipCount[$ip]--;
         $this->cidCount[$cid]--;
     }
