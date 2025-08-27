@@ -5,58 +5,89 @@ use pocketmine\plugin\PluginBase;
 use pocketmine\event\Listener;
 use pocketmine\event\player\PlayerPreLoginEvent;
 use pocketmine\event\player\PlayerQuitEvent;
-use pocketmine\utils\Config;
 use pocketmine\Player;
 
 class Main extends PluginBase implements Listener
 {
 
+    /**
+     * @var array<string, int>
+     */
     private $ipCount = [];
+    /**
+     * @var array<int|string, int>
+     */
     private $cidCount = [];
     private $maxIpConnections;
     private $maxCidConnections;
+    private $kickMessage;
+    private $whitelist;
 
     public function onEnable()
     {
-        @mkdir($this->getDataFolder());
         $this->saveDefaultConfig();
         $this->getServer()->getPluginManager()->registerEvents($this, $this);
 
-        $config = new Config($this->getDataFolder() . "config.yml", Config::YAML, [
-            "max_ip_connections" => 3,
-            "max_cid_connections" => 2,
-            "kick_message" => "§c我操你妈开小号的死妈伪人" //§c每个IP最多允许{ip_limit}个连接，每个设备最多允许{cid_limit}个连接
-        ]);
+        $config = $this->getConfig();
 
         $this->maxIpConnections = $config->get("max_ip_connections");
         $this->maxCidConnections = $config->get("max_cid_connections");
         $this->kickMessage = $config->get("kick_message");
+        $this->whitelist = (array) $config->get("whitelist");
+
+        // 重新检查登录情况，配置文件可能有改变
+        foreach ($this->getServer()->getOnlinePlayers() as $player) {
+            $message = $this->checkPlayerLogin($player);
+            if ($message !== false) {
+                $player->kick($message, false);
+            }
+        }
     }
 
     public function onPreLogin(PlayerPreLoginEvent $event)
     {
-        $player = $event->getPlayer();
+        $message = $this->checkPlayerLogin($event->getPlayer());
+        if ($message !== false) {
+            $event->setKickMessage($message);
+            $event->setCancelled(true);
+        }
+    }
+
+    /**
+     * 满足条件返回false，否则返回踢出提示
+     * @param Player $player
+     * @return array|bool|string
+     */
+    protected function checkPlayerLogin(Player $player) {
         $ip = $player->getAddress();
         $cid = $player->getClientId();
+
+        // 跳过验证
+        if ($this->isWhitelisted($ip, $cid)) {
+            return false;
+        }
 
         // 统计IP连接数
         if (!isset($this->ipCount[$ip])) {
             $this->ipCount[$ip] = 0;
         }
-        $this->ipCount[$ip]++;
 
         // 统计CID连接数
         if (!isset($this->cidCount[$cid])) {
             $this->cidCount[$cid] = 0;
         }
-        $this->cidCount[$cid]++;
 
-        // 检查限制
         $kick = false;
-        if ($this->ipCount[$ip] > $this->maxIpConnections) {
+
+        // 判断白名单没有忽略IP并超过最大连接数量
+        if ((!isset($this->whitelist["ip$ip"]) or $this->whitelist["ip$ip"] != "ignore") and
+            ++$this->ipCount[$ip] > $this->maxIpConnections) {
             $kick = true;
         }
-        if ($this->cidCount[$cid] > $this->maxCidConnections) {
+
+        // 判断白名单没有忽略CID并超过最大连接数量
+        if ((!isset($this->whitelist["cid$cid"]) or $this->whitelist["cid$cid"] != "ignore") and
+            ++$this->cidCount[$cid] > $this->maxCidConnections) {
             $kick = true;
         }
 
@@ -66,15 +97,15 @@ class Main extends PluginBase implements Listener
                 [$this->maxIpConnections, $this->maxCidConnections],
                 $this->kickMessage
             );
-            $event->setKickMessage($message);
-            $event->setCancelled(true);
-
-
-            if ($this->ipCount[$ip] <= 0)
-                unset($this->ipCount[$ip]);
-            if ($this->cidCount[$cid] <= 0)
-                unset($this->cidCount[$cid]);
+            // 不能在这减少计数，稍后调用close会触发PlayerQuitEvent
+            return $message;
         }
+        return false;
+    }
+
+    protected function isWhitelisted(string $ip, $cid) {
+        return isset($this->whitelist["ip$ip"]) and $this->whitelist["ip$ip"] == "pass" or
+            isset($this->whitelist["cid$cid"]) and $this->whitelist["cid$cid"] == "pass";
     }
 
     public function onPlayerQuit(PlayerQuitEvent $event)
@@ -82,8 +113,22 @@ class Main extends PluginBase implements Listener
         $player = $event->getPlayer();
         $ip = $player->getAddress();
         $cid = $player->getClientId();
-        $this->ipCount[$ip]--;
-        $this->cidCount[$cid]--;
+
+        if ($this->isWhitelisted($ip, $cid)) {
+            return;
+        }
+
+        if (isset($this->ipCount[$ip])) {
+            if (--$this->ipCount[$ip] <= 0) {
+                unset($this->ipCount[$ip]);
+            }
+        }
+
+        if (isset($this->cidCount[$cid])) {
+            if (--$this->cidCount[$cid] <= 0) {
+                unset($this->cidCount[$cid]);
+            }
+        }
     }
 
     public function onDisable()
