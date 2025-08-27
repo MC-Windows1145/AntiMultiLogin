@@ -1,10 +1,10 @@
 <?php
 namespace AntiMultiLogin;
 
-use pocketmine\event\player\PlayerQuitEvent;
 use pocketmine\plugin\PluginBase;
 use pocketmine\event\Listener;
 use pocketmine\event\player\PlayerPreLoginEvent;
+use pocketmine\event\player\PlayerQuitEvent;
 use pocketmine\Player;
 
 class Main extends PluginBase implements Listener
@@ -35,10 +35,10 @@ class Main extends PluginBase implements Listener
         $this->kickMessage = $config->get("kick_message");
         $this->whitelist = (array) $config->get("whitelist");
 
-        // 重新记录在线玩家
+        // 重新检查登录情况，配置文件可能有改变
         foreach ($this->getServer()->getOnlinePlayers() as $player) {
-            $message = $this->registerPlayer($player);
-            if ($message !== false) { // 配置文件可能有改变
+            $message = $this->checkPlayerLogin($player);
+            if ($message !== false) {
                 $player->kick($message, false);
             }
         }
@@ -46,7 +46,7 @@ class Main extends PluginBase implements Listener
 
     public function onPreLogin(PlayerPreLoginEvent $event)
     {
-        $message = $this->registerPlayer($event->getPlayer());
+        $message = $this->checkPlayerLogin($event->getPlayer());
         if ($message !== false) {
             $event->setKickMessage($message);
             $event->setCancelled(true);
@@ -58,7 +58,7 @@ class Main extends PluginBase implements Listener
      * @param Player $player
      * @return array|bool|string
      */
-    protected function registerPlayer(Player $player) {
+    protected function checkPlayerLogin(Player $player) {
         $ip = $player->getAddress();
         $cid = $player->getClientId();
 
@@ -97,7 +97,7 @@ class Main extends PluginBase implements Listener
                 [$this->maxIpConnections, $this->maxCidConnections],
                 $this->kickMessage
             );
-            // 不能在这减少计数
+            // 不能在这减少计数，稍后调用close会触发PlayerQuitEvent
             return $message;
         }
         return false;
